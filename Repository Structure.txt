@@ -1,0 +1,15 @@
+├── benchmarks/
+│   ├── cooks_membrane.py
+│   ├── pressurized_cylinder.py
+│   └── seal_compression.py
+├── src/
+│   ├── stabilized_hyperelasticity.py
+│   ├── meshes.py
+│   └── postprocess.py
+├── meshes/  (pre-generated)
+│   ├── cooks_mesh.xml
+│   ├── cylinder_axisym.xml
+│   └── seal_3D.msh
+├── results/  (output directory)
+├── requirements.txt
+└── README.md  (setup instructions)
