@@ -62,16 +62,14 @@ class StabilizedHyperelasticitySolver:
         
         # Material stress
         P = diff(self.material.strain_energy(F_v), F_v)
-        # 移除原有的体积部分，替换为混合变量 p 的贡献
-        # p 在这里定义为正压力 (对应于 -kappa*(J-1))
-        P = P - self.material.kappa * (J - 1) * H - self.p * H
+        P = P - self.p*H
     
         # Stabilization parameter
         tau = 0.1 * self.h**2 / self.material.mu
         
         # Residuals (Eq. 11-12)
         R_u = div(P)  # Simplified, no body force
-        R_p = J - 1 + self.p / self.material.kappa
+        R_p = J - 1
         
         # ✅ 定义边界测度 ds 和牵引力
         ds = Measure("ds", domain=self.mesh, subdomain_data=self.boundaries)
@@ -81,7 +79,7 @@ class StabilizedHyperelasticitySolver:
         # Weak form (Eq. 13-14)
         Res_traction = -inner(traction, self.v) * ds(2)  # ds(2) 表示右边界
         Res_u = inner(P, grad(self.v))*dx + tau*inner(H, grad(self.v))*R_p*dx       
-        Res_p = self.q*R_p*dx - tau*inner(R_u, H*grad(self.q))*dx
+        Res_p = self.q*(J - 1)*dx - tau*inner(R_u, H*grad(self.q))*dx
         self.Res = Res_u + Res_p + Res_traction
         
         # Tangent matrix (Automatic differentiation)
