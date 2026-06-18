@@ -28,15 +28,15 @@ class MooneyRivlin:
 
 # Stabilized FEM solver
 class StabilizedHyperelasticitySolver:
-    def __init__(self, mesh, boundaries, material, order=2):
+    def __init__(self, mesh, boundaries, material, u_order=2, p_order=1):
         self.mesh = mesh
         self.boundaries = boundaries
         self.material = material
         self.h = CellDiameter(mesh)
         
-        # Mixed function space (equal-order)
-        V_elem = VectorElement("CG", mesh.ufl_cell(), order)
-        Q_elem = FiniteElement("CG", mesh.ufl_cell(), order)
+        # Mixed function space
+        V_elem = VectorElement("CG", mesh.ufl_cell(), u_order)
+        Q_elem = FiniteElement("CG", mesh.ufl_cell(), p_order)
         mixed_element = MixedElement([V_elem, Q_elem])
         self.W = FunctionSpace(mesh, mixed_element)
         
@@ -80,8 +80,8 @@ class StabilizedHyperelasticitySolver:
         
         # Weak form (Eq. 13-14)
         Res_traction = -inner(traction, self.v) * ds(2)  # ds(2) 表示右边界
-        Res_u = inner(P, grad(self.v))*dx + tau*inner(H, grad(self.v))*R_p*dx       
-        Res_p = self.q*R_p*dx - tau*inner(R_u, H*grad(self.q))*dx
+        Res_u = inner(P, grad(self.v))*dx #+ tau*inner(H, grad(self.v))*R_p*dx       
+        Res_p = self.q*R_p*dx #- tau*inner(R_u, H*grad(self.q))*dx
         self.Res = Res_u + Res_p + Res_traction
         
         # Tangent matrix (Automatic differentiation)
