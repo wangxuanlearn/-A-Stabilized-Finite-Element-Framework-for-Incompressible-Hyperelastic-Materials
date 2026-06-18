@@ -19,8 +19,7 @@ t_total_start = time.time()
 
 # Parameters
 mu = 80.0
-nu = 0.4999
-kappa = 2*mu*(1+nu)/(3*(1-2*nu))
+# 完全不可压缩不再需要 nu 和 kappa (理论上 kappa 趋于无限大)
 
 # 1. 网格生成
 t0 = time.time()
@@ -30,7 +29,7 @@ print(f"网格生成: {timings['网格生成']:.2f} 秒")
 
 # 2. 求解器初始化
 t0 = time.time()
-material = NeoHookean(mu, kappa)
+material = NeoHookean(mu)
 solver = StabilizedHyperelasticitySolver(
     mesh, boundaries, material, u_order=1, p_order=1
 )
@@ -41,6 +40,13 @@ print(f"求解器初始化: {timings['求解器初始化']:.2f} 秒")
 bc = DirichletBC(solver.W.sub(0), Constant((0.0, 0.0)), boundaries, 1)
 bcs = [bc]
 
+# 添加原有的 Cook's 膜右端外力牵引
+ds = Measure("ds", domain=mesh, subdomain_data=boundaries)
+traction = Constant((0.0, 6.25))
+solver.Res -= inner(traction, solver.v) * ds(2)
+solver.Jacobian = derivative(solver.Res, solver.w, solver.w_trial)
+
+
 # 3. 求解（用 finally 保证 timings['求解'] 被赋值）
 print("\nSolving...")
 t0 = time.time()
@@ -49,11 +55,9 @@ try:
     print("✓ Solution converged!")
 except Exception as e:
     print(f"✗ Solver failed: {e}")
-    timings['求解'] = time.time() - t0
-    raise
-finally:
-    timings['求解'] = time.time() - t0
-    print(f"求解耗时: {timings['求解']:.2f} 秒")
+    exit(1)
+timings['求解'] = time.time() - t0
+print(f"求解耗时: {timings['求解']:.2f} 秒")
 
 # 4. 保存结果
 t0 = time.time()

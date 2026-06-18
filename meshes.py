@@ -56,5 +56,47 @@ def create_cooks_mesh(nx=12, ny=6):
     
     return mesh_rect, boundaries
 
-
-
+def create_three_dimensional_beam_mesh(mesh_size=0.25):
+    """
+    创建三维梁的网格和边界条件
+    
+    参数:
+        L: 梁长度 (x方向)
+        W: 梁宽度 (y方向)  
+        H: 梁高度 (z方向)
+        mesh_size: 平均网格尺寸
+    
+    返回:
+        mesh: 网格对象
+        bcs: 边界条件列表
+        ds: 边界测度 (用于施加载荷)
+    """
+    L = 6.0   # 长度 (x方向)
+    W = 1.0   # 宽度 (y方向)
+    H = 1.0   # 高度 (z方向)
+        
+    # 1. 创建网格
+    nx = int(L / mesh_size)
+    ny = int(W / mesh_size)
+    nz = int(H / mesh_size)
+    
+    mesh = BoxMesh(Point(0, -W/2, -H/2), Point(L, W/2, H/2), nx, ny, nz)
+        
+    # ---- 边界 6: X=0 端面 (压力加载) ----
+    class LeftEnd(SubDomain):
+        def inside(self, x, on_boundary):
+            return on_boundary and near(x[0], 0.0)
+    
+    # ---- 边界 7: X=6 端面 (压力加载) ----
+    class RightEnd(SubDomain):
+        def inside(self, x, on_boundary):
+            return on_boundary and near(x[0], L)
+    
+    boundaries = MeshFunction("size_t", mesh, mesh.geometry().dim() - 1)
+    boundaries.set_all(0)
+    
+    # 标记边界
+    LeftEnd().mark(boundaries, 6)
+    RightEnd().mark(boundaries, 7)
+    
+    return mesh, boundaries
