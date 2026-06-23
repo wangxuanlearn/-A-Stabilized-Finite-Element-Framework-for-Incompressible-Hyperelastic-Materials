@@ -24,10 +24,13 @@ E = 250.0  # N/m2
 dt = 0.01
 rho = 1.0
 num_steps = 700
+u_order = 1
+p_order = 1
+stab_label = "GLS"  # 稳定化标签: "GLS" 或 "noStab"
 
 # 1. 网格生成
 t0 = time.time()
-mesh, boundaries = create_cooks_mesh(nx=32, ny=26)
+mesh, boundaries = create_cooks_mesh(nx=16, ny=13)
 timings['网格生成'] = time.time() - t0
 if MPI.comm_world.rank == 0:
     print(f"网格生成: {timings['网格生成']:.2f} 秒")
@@ -36,7 +39,7 @@ if MPI.comm_world.rank == 0:
 t0 = time.time()
 material = SimoTaylorNeoHookean(E)
 solver = DynamicStabilizedHyperelasticitySolver(
-    mesh, boundaries, material, dt=dt, rho=rho, u_order=2, p_order=1
+    mesh, boundaries, material, dt=dt, rho=rho, u_order=u_order, p_order=p_order, c1=1.0, c2=4.0, c3=0.1
 )
 timings['求解器初始化'] = time.time() - t0
 if MPI.comm_world.rank == 0:
@@ -51,7 +54,7 @@ ds = Measure("ds", domain=mesh, subdomain_data=boundaries)
 # 将载荷设为随时间平滑增加，避免物理上的瞬间无穷大加速度冲击
 traction = Constant((0.0, 6.25))
 
-# 将内力加载到残差上
+# 将外力加载到残差上
 solver.Res -= inner(traction, solver.v) * ds(2)
 solver.Jacobian = derivative(solver.Res, solver.w, solver.w_trial)
 
@@ -68,23 +71,29 @@ xdmf_file_p.parameters["flush_output"] = True
 time_points = []
 uy_values = []
 
-point = Point(48, 60)  # 指定读取位移的点位
+point = Point(4.8, 6.0)  # 指定读取位移的点位
+
+# 构建 CSV 文件名: uy_u{p}_p{q}_{stab}.csv
+csv_filename = f"results/dynamic_cooks/uy_u{u_order}_p{p_order}_{stab_label}.csv"
 
 try:
     for step in range(num_steps):
         t = step * dt
         if MPI.comm_world.rank == 0:
             print(f"Time step {step+1}/{num_steps}, t={t:.3f}")
-            
-        if step > 0:
-            solver.w_nn.assign(solver.w_n)
-            solver.w_n.assign(solver.w)
-            
-        # 稳定加载，前 0.1s 缓慢加力到 6.25
+        
+        # 稳定加载，前 0.1s 缓慢加力到 6.25，避免激波引发发散
         current_force = 6.25 * min(t / 0.1, 1.0)
         traction.assign(Constant((0.0, current_force)))
-            
-        solver.solve(bcs, tol=1e-8)
+        
+        # 第一步无历史数据，不启用预测器
+        use_pred = (step > 0)
+        solver.solve(bcs, tol=1e-8, use_predictor=use_pred)
+        
+        # 更新前两个时间步状态
+        if step > 0:
+            solver.w_nn.assign(solver.w_n)
+        solver.w_n.assign(solver.w)
         
         u, p = solver.w.split(deepcopy=True)
         u.rename("displacement", "displacement")
@@ -109,6 +118,16 @@ try:
         
         time_points.append(t)
         uy_values.append(uy)
+    
+    # 保存 CSV 文件（仅 rank 0）
+    if MPI.comm_world.rank == 0 and len(time_points) > 0:
+        import csv
+        with open(csv_filename, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['time', 'uy'])
+            for ti, uyi in zip(time_points, uy_values):
+                writer.writerow([ti, uyi])
+        print(f"✓ CSV 已保存: {csv_filename}")
         
     if MPI.comm_world.rank == 0:
         print("✓ Dynamic solution completed!")
@@ -157,3 +176,7 @@ if MPI.comm_world.rank == 0 and len(time_points) > 0:
 else:
     if MPI.comm_world.rank == 0:
         print("⚠ No data collected, skipping plot.")
+        
+# 结束程序，提取图表曲线结果
+if MPI.comm_world.rank == 0 and len(uy_values) > 0:
+    print(f"End u_y at (4.8, 6.0) = {uy_values[-1]:.6f} m")

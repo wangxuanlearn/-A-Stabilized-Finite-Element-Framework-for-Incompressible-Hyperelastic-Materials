@@ -19,19 +19,19 @@ t_total_start = time.time()
 
 # Parameters
 E = 250.0  # N/m2
-nu = 0.49995
+# 完全不可压
 
 # 1. 网格生成
 t0 = time.time()
-mesh, boundaries = create_three_dimensional_beam_mesh(mesh_size=0.0625)
+mesh, boundaries = create_three_dimensional_beam_mesh(mesh_size=0.125)
 timings['网格生成'] = time.time() - t0
 print(f"网格生成: {timings['网格生成']:.2f} 秒")
 
 # 2. 求解器初始化
 t0 = time.time()
-material = SimoTaylorNeoHookean(E, nu)
+material = SimoTaylorNeoHookean(E)
 solver = StabilizedHyperelasticitySolver(
-    mesh, boundaries, material, u_order=2, p_order=1
+    mesh, boundaries, material, u_order=1, p_order=1
 )
 timings['求解器初始化'] = time.time() - t0
 print(f"求解器初始化: {timings['求解器初始化']:.2f} 秒")
@@ -74,8 +74,9 @@ ds = Measure("ds", domain=mesh, subdomain_data=boundaries)
 
 # 左端面 (x=0): 法向量为 (-1, 0, 0)
 # 右端面 (x=L): 法向量为 (1, 0, 0)
-traction_left = Constant((-1.0, 0.0, 0.0)) * pressure
-traction_right = Constant((1.0, 0.0, 0.0)) * pressure
+N = FacetNormal(mesh)
+traction_left = -N * pressure 
+traction_right = -N * pressure
 solver.Res -= inner(traction_left, solver.v) * ds(6) + inner(traction_right, solver.v) * ds(7)
 # 更新 Jacobian 矩阵
 solver.Jacobian = derivative(solver.Res, solver.w, solver.w_trial)
@@ -116,3 +117,8 @@ for name, elapsed in timings.items():
 print(f"  {'-'*46}")
 print(f"  {'总计':<15}: {t_total:>8.2f} 秒 (100.0%)")
 print(f"{'='*50}")
+
+
+# 获取中点竖向挠度
+uy_mid = u(Point(3.0, 0.0, 0.0))
+print(f"u_y = {uy_mid} m")
