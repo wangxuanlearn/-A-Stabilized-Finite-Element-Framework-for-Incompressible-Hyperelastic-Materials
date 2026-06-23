@@ -1,5 +1,5 @@
 from dolfin import *
-from ufl import Identity, tr, det, grad, inv, derivative, variable, ln
+from ufl import Identity, tr, det, grad, inv, derivative, variable, ln, conditional
 import numpy as np
 from petsc4py import PETSc
 
@@ -138,11 +138,14 @@ class DynamicStabilizedHyperelasticitySolver:
 
         P = diff(self.material.strain_energy(F_v), F_v) - self.p * H
     
-        # LSIC 稳定参数（动量方程）
-        tau_p = c3 * material.mu * self.h**2
-        # PSPG 稳定参数（连续方程，不含时间导数，与静态求解器一致）
-        tau_pspg = c4 * self.h**2 / material.mu
+        # 材料参数
+        self.mu = material.mu
         
+        # LSIC 稳定参数（动量方程）
+        tau_p = c3 * self.mu * self.h**2
+        # PSPG 稳定参数: τ = (c_tau/2)·max(dt_mu/100, min(dt_mu, Δt))
+        #   dt_mu = h / c_mu  剪切波穿越单元时间
+        tau_pspg = c4 * self.h**2 / material.mu
         if hasattr(self.material, 'pressure_residual'):
             R_p = self.material.pressure_residual(J, self.p)
         elif hasattr(self.material, 'kappa'):
@@ -150,13 +153,16 @@ class DynamicStabilizedHyperelasticitySolver:
         else:
             R_p = J - 1
 
+        # 完整动态残差（含惯性项）
+        R_u = div(P)
+        
         # GLS 变分形式
         Res_u = inner(self.rho * a, self.v)*dx + inner(P, grad(self.v))*dx
         Res_p = self.q*R_p*dx
         
         if self._use_stab:
             Res_u += tau_p*inner(H, grad(self.v))*R_p*dx
-            Res_p += - tau_pspg*inner(div(P), H*grad(self.q))*dx
+            Res_p += - tau_pspg*inner(R_u, H*grad(self.q))*dx
         
         self.Res = Res_u + Res_p
         self.Jacobian = derivative(self.Res, self.w, self.w_trial)
