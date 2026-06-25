@@ -7,8 +7,8 @@ def create_cooks_mesh(nx=12, ny=6):
         (0, 0), (0, 4.4), (4.8, 4.4), (4.8, 6.0)
     上边界水平 (Y=4.4)，下边界从 0 到 6.0
     """
-    L = 4.80
-    H_total = 6.00      # 用于映射的参考高度
+    L=4.8                        
+    H_total = 6.0    # 用于映射的参考高度
     
     # 上边界在 x 位置的 y 坐标: 从 (0,4.4) 到 (4.8,6.0)
     top_start = 4.4    # x=0 时上边界 y=4.4
@@ -98,5 +98,74 @@ def create_three_dimensional_beam_mesh(mesh_size=0.25):
     # 标记边界
     LeftEnd().mark(boundaries, 6)
     RightEnd().mark(boundaries, 7)
+    
+    return mesh, boundaries
+
+def create_anisotropic_compressblock_mesh(nx=20, ny=10, scale=1):
+    """
+    矩形块网格 (用于不可压缩验证)
+    
+    几何 (默认单位: cm):
+        总宽: 20 cm, 总高: 10 cm
+        四个顶点:
+            A (0, 0), B (0, 10), C (20, 0), D (20, 10)
+    
+    边界条件:
+        左侧 (x=0): u_x = 0
+        底部 (y=0): u_y = 0
+        顶部 (y=10): 受均匀压力载荷
+        右侧 (x=20): 自由
+    
+    参数:
+        nx, ny: 网格划分密度
+        scale: 几何缩放因子 (如果 scale=0.01，则转为 m 单位)
+    
+    返回:
+        mesh: 网格对象
+        boundaries: 边界标记
+            (1: 左边界, 2: 底部边界, 3: 顶部边界, 4: 右边界)
+    """
+    # 几何尺寸 (默认 cm)
+    L = 20.0 * scale      # 总宽度
+    H = 10.0 * scale      # 总高度
+    
+    # 1. 创建矩形网格
+    mesh = RectangleMesh(Point(0.0, 0.0), Point(L, H), nx, ny)
+    
+    # 左边界 (x ≈ 0) → 标记为 1
+    class LeftBoundary(SubDomain):
+        def inside(self, x, on_boundary):
+            return on_boundary and near(x[0], 0.0)
+        
+    # 底部边界 (y ≈ 0) → 标记为 2
+    class BottomBoundary(SubDomain):
+        def inside(self, x, on_boundary):
+            return on_boundary and near(x[1], 0.0)
+    
+    # 顶部边界 (y ≈ H) → 标记为 3
+    class TopBoundary(SubDomain):
+        def inside(self, x, on_boundary):
+            return on_boundary and near(x[1], H)
+    
+    # 右侧边界 (x ≈ L) → 标记为 4
+    class RightBoundary(SubDomain):
+        def inside(self, x, on_boundary):
+            return on_boundary and near(x[0], L)
+    
+    # 在上边界 [5,15] 范围标记为新边界 5，其余顶部保持标记 3
+    class LoadedTop(SubDomain):
+        def inside(self, x, on_boundary):
+            return on_boundary and near(x[1], H) and x[0] >= 5.0 and x[0] <= 15.0
+    
+    # 创建边界标记
+    boundaries = MeshFunction("size_t", mesh, mesh.geometry().dim() - 1)
+    boundaries.set_all(0)
+    
+    # 标记边界
+    LeftBoundary().mark(boundaries, 1)
+    BottomBoundary().mark(boundaries, 2)
+    TopBoundary().mark(boundaries, 3)
+    RightBoundary().mark(boundaries, 4)
+    LoadedTop().mark(boundaries, 5)
     
     return mesh, boundaries
