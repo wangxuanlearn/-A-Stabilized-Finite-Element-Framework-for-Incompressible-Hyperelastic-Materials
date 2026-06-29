@@ -1,6 +1,6 @@
 from dolfin import *  
 
-def create_cooks_mesh(nx=12, ny=6):
+def create_cooks_mesh(nx=128, ny=128):
     """
     Cook's membrane 几何
     四个顶点:
@@ -19,7 +19,7 @@ def create_cooks_mesh(nx=12, ny=6):
     bottom_end = 4.4   # x=48 时下边界 y=4.4
     
     # 创建矩形网格
-    mesh_rect = RectangleMesh(Point(0, 0), Point(L, H_total), nx, ny)
+    mesh_rect = RectangleMesh(Point(0, 0), Point(L, H_total), nx, ny, "crossed")
     
     # 变换坐标
     coords = mesh_rect.coordinates()
@@ -167,5 +167,72 @@ def create_anisotropic_compressblock_mesh(nx=20, ny=10, scale=1):
     TopBoundary().mark(boundaries, 3)
     RightBoundary().mark(boundaries, 4)
     LoadedTop().mark(boundaries, 5)
+    
+    return mesh, boundaries
+
+def create_swellingcube_mesh(mesh_size=0.05):
+    """
+    创建膨胀立方体网格 (1 cm × 1 cm × 1 cm)
+    
+    参数:
+        mesh_size: 网格尺寸 (默认 0.05 cm，对应 h=0.05 cm)
+    
+    返回:
+        mesh: 立方体网格
+        boundaries: 边界标记
+    """
+    # 立方体尺寸 (单位: cm)
+    L = 1.0   # 长度 (x方向) 0-1 cm
+    W = 1.0   # 宽度 (y方向) 0-1 cm
+    H = 1.0   # 高度 (z方向) 0-1 cm
+    
+    # 计算网格划分数量
+    nx = int(L / mesh_size)
+    ny = int(W / mesh_size)
+    nz = int(H / mesh_size)
+    
+    # 创建立方体网格 (单位: cm)
+    mesh = BoxMesh(Point(0, 0, 0), Point(L, W, H), nx, ny, nz)
+    
+    # ---- 定义边界子域 ----
+    # 左端面: X=0 (施加孔隙压力)
+    class LeftEnd(SubDomain):
+        def inside(self, x, on_boundary):
+            return on_boundary and near(x[0], 0.0)
+    
+    # 右端面: X=L (固定压力为零)
+    class RightEnd(SubDomain):
+        def inside(self, x, on_boundary):
+            return on_boundary and near(x[0], L)
+    
+    # 其他四个面: 不透水 (X方向约束流动)
+    # Y=0, Y=W, Z=0, Z=H 设置为不透水边界
+    class ImpermeableYMin(SubDomain):
+        def inside(self, x, on_boundary):
+            return on_boundary and near(x[1], 0.0)
+    
+    class ImpermeableYMax(SubDomain):
+        def inside(self, x, on_boundary):
+            return on_boundary and near(x[1], W)
+    
+    class ImpermeableZMin(SubDomain):
+        def inside(self, x, on_boundary):
+            return on_boundary and near(x[2], 0.0)
+    
+    class ImpermeableZMax(SubDomain):
+        def inside(self, x, on_boundary):
+            return on_boundary and near(x[2], H)
+    
+    # 创建边界标记函数
+    boundaries = MeshFunction("size_t", mesh, mesh.geometry().dim() - 1)
+    boundaries.set_all(0)
+    
+    # 标记边界 (根据图片描述)
+    LeftEnd().mark(boundaries, 1)      # 左端面 X=0 (压力加载)
+    RightEnd().mark(boundaries, 2)     # 右端面 X=L (压力为零)
+    ImpermeableYMin().mark(boundaries, 3)   # Y=0 不透水
+    ImpermeableYMax().mark(boundaries, 4)   # Y=W 不透水
+    ImpermeableZMin().mark(boundaries, 5)  # Z=0 不透水
+    ImpermeableZMax().mark(boundaries, 6)  # Z=H 不透水
     
     return mesh, boundaries

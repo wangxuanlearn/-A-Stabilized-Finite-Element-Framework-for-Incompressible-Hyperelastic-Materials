@@ -39,7 +39,7 @@ if MPI.comm_world.rank == 0:
 t0 = time.time()
 material = SimoTaylorNeoHookean(E)
 solver = DynamicStabilizedHyperelasticitySolver(
-    mesh, boundaries, material, dt=dt, rho=rho, u_order=u_order, p_order=p_order, c3=0.1, c_tau=0.02
+    mesh, boundaries, material, dt=dt, rho=rho, u_order=u_order, p_order=p_order, c1=1, c2=4, c3=0.1
 )
 timings['求解器初始化'] = time.time() - t0
 if MPI.comm_world.rank == 0:
